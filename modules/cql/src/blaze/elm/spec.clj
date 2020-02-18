@@ -374,6 +374,17 @@
                          :elm.quantity.temporal-keyword/unit hours-unit-gen})))
 
 
+;; 3.11 ValueSetDef
+(s/def :elm/value-set-def
+  (s/keys :req-un [:elm/id]
+          :opt-un [:elm/name :elm/version]))
+
+
+;; 3.12 ValueSetRef
+(defmethod expression :elm.spec.type/value-set-ref [_]
+  (s/keys :opt-un [:elm/name :elm/libraryName]))
+
+
 
 ;; 4. Type Specifiers
 
@@ -482,6 +493,14 @@
   (s/keys :req-un [:elm.library.code-systems/def]))
 
 
+(s/def :elm.library.value-sets/def
+  (s/coll-of :elm/value-set-def))
+
+
+(s/def :elm.library/valueSets
+  (s/keys :req-un [:elm.library.value-sets/def]))
+
+
 (s/def :elm.library.codes/def
   (s/coll-of :elm/code-def))
 
@@ -501,6 +520,7 @@
 (s/def :elm/library
   (s/keys :req-un [:elm.library/identifier :elm.library/schemaIdentifier]
           :opt-un [:elm.library/codeSystems
+                   :elm.library/valueSets
                    :elm.library/codes
                    :elm.library/statements]))
 

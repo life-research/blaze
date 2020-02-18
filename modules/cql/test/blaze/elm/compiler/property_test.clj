@@ -5,7 +5,17 @@
     [blaze.elm.compiler.property
      :refer [attr scope-expr scope-runtime-type-expr]]
     [blaze.elm.compiler.protocols :refer [-eval]]
-    [clojure.test :refer [are deftest is]]))
+    [clojure.spec.test.alpha :as st]
+    [clojure.test :as test :refer [are deftest is]]))
+
+
+(defn fixture [f]
+  (st/instrument)
+  (f)
+  (st/unstrument))
+
+
+(test/use-fixtures :each fixture)
 
 
 (deftest attr-test
@@ -38,25 +48,33 @@
     {:resultTypeName "{http://hl7.org/fhir}decimal"
      :path "value"
      :type "Property"
-     :source {:resultTypeName "{http://hl7.org/fhir}Quantity"}}
+     :source
+     {:resultTypeName "{http://hl7.org/fhir}Quantity"
+      :type "Quantity" :value 1}}
     datomic-quantity/value
 
     {:resultTypeName "{http://hl7.org/fhir}decimal"
      :path "unit"
      :type "Property"
-     :source {:resultTypeName "{http://hl7.org/fhir}Quantity"}}
+     :source
+     {:resultTypeName "{http://hl7.org/fhir}Quantity"
+      :type "Quantity" :value 1}}
     datomic-quantity/unit
 
     {:resultTypeName "{http://hl7.org/fhir}decimal"
      :path "system"
      :type "Property"
-     :source {:resultTypeName "{http://hl7.org/fhir}Quantity"}}
+     :source
+     {:resultTypeName "{http://hl7.org/fhir}Quantity"
+      :type "Quantity" :value 1}}
     datomic-quantity/system
 
     {:resultTypeName "{http://hl7.org/fhir}decimal"
      :path "code"
      :type "Property"
-     :source {:resultTypeName "{http://hl7.org/fhir}Quantity"}}
+     :source
+     {:resultTypeName "{http://hl7.org/fhir}Quantity"
+      :type "Quantity" :value 1}}
     datomic-quantity/code))
 
 

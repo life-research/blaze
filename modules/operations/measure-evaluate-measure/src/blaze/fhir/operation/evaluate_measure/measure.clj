@@ -9,6 +9,7 @@
     [blaze.fhir.operation.evaluate-measure.cql :as cql]
     [blaze.fhir.operation.evaluate-measure.spec :as spec]
     [blaze.handler.fhir.util :as fhir-util]
+    [blaze.terminology-service :refer [term-service?]]
     [clojure.spec.alpha :as s]
     [cognitect.anomalies :as anom]
     [datomic-spec.core :as ds]
@@ -54,7 +55,7 @@
      :fhir/issue "value"}))
 
 
-(defn- compile-library [db {:Library/keys [id] :as library}]
+(defn- compile-library [db term-service {:Library/keys [id] :as library}]
   (log/debug "Compile library with ID:" id)
   (let [cql-code (extract-cql-code library)]
     (if (::anom/category cql-code)
@@ -65,14 +66,14 @@
           (assoc library
             :fhir/issue "value"
             :fhir.issue/expression "Measure.library")
-          (compiler/compile-library db library {}))))))
+          (compiler/compile-library db term-service library {}))))))
 
 
 (defn- compile-primary-library*
-  [db measure]
+  [db term-service measure]
   (if-let [library-ref (first (:Measure/library measure))]
     (if-let [library (datomic-util/resource-by db :Library/url library-ref)]
-      (compile-library db library)
+      (compile-library db term-service library)
       {::anom/category ::anom/incorrect
        ::anom/message
        (str "Can't find the library with canonical URI `" library-ref "`.")
@@ -92,9 +93,9 @@
 (defn- compile-primary-library
   "Returns the primary library from `measure` in compiled form or an anomaly
   on errors."
-  [db measure]
+  [db term-service measure]
   (with-open [_ (prom/timer compile-duration-seconds)]
-    (compile-primary-library* db measure)))
+    (compile-primary-library* db term-service measure)))
 
 
 (defn- evaluate-population
@@ -386,6 +387,7 @@
   (s/cat
     :now #(instance? OffsetDateTime %)
     :db ::ds/db
+    :term-service term-service?
     :router reitit/router?
     :period (s/tuple temporal? temporal?)
     :measure ::spec/measure-entity))
@@ -395,9 +397,9 @@
 
   Returns an already completed MeasureReport which isn't persisted or an anomaly
   in case of errors."
-  {:arglists '([now db router period measure])}
-  [now db router [start end] {groups :Measure/group :as measure}]
-  (let [library (compile-primary-library db measure)]
+  {:arglists '([now db term-service router period measure])}
+  [now db term-service router [start end] {groups :Measure/group :as measure}]
+  (let [library (compile-primary-library db term-service measure)]
     (if (::anom/category library)
       library
       (let [evaluated-groups

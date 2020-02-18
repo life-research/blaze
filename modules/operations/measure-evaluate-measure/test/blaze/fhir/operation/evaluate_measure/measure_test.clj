@@ -8,7 +8,7 @@
     [blaze.fhir.operation.evaluate-measure.cql :as cql]
     [blaze.fhir.operation.evaluate-measure.measure :refer [evaluate-measure]]
     [blaze.handler.fhir.util :as fhir-util]
-    [blaze.terminology-service.extern :as ts]
+    [blaze.terminology-service :as ts]
     [cheshire.core :as json]
     [cheshire.parse :refer [*use-bigdecimals?*]]
     [clojure.spec.alpha :as s]
@@ -16,6 +16,7 @@
     [clojure.test :as test :refer [are deftest is testing]]
     [cognitect.anomalies :as anom]
     [datomic.api :as d]
+    [manifold.deferred :as md]
     [juxt.iota :refer [given]]
     [taoensso.timbre :as log])
   (:import
@@ -56,13 +57,14 @@
      #{`cql-translator/translate}}))
 
 
-(defn stub-compile-library [db library compiled-library]
+(defn stub-compile-library [db term-service library compiled-library]
   (st/instrument
     [`compiler/compile-library]
     {:spec
      {`compiler/compile-library
       (s/fspec
-        :args (s/cat :db #{db} :library #{library} :opts #{{}})
+        :args (s/cat :db #{db} :term-service #{term-service}
+                     :library #{library} :opts #{{}})
         :ret #{compiled-library})}
      :stub
      #{`compiler/compile-library}}))
@@ -150,7 +152,7 @@
   (st/unstrument `evaluate-measure)
 
   (testing "Missing primary library"
-    (given (evaluate-measure now ::db ::router [::start ::end] {})
+    (given (evaluate-measure now ::db ::term-service ::router [::start ::end] {})
       ::anom/category := ::anom/unsupported
       ::anom/message := "Missing primary library. Currently only CQL expressions together with one primary library are supported."
       :fhir/issue := "not-supported"
@@ -176,9 +178,9 @@
       (datomic-test-util/stub-resource-by
         ::db #{:Library/url} #{"http://foo"} #{library})
       (stub-cql-translate "library-data" ::elm-library)
-      (stub-compile-library ::db ::elm-library ::compiled-library)
+      (stub-compile-library ::db ::term-service ::elm-library ::compiled-library)
 
-      (given (evaluate-measure now ::db ::router [::start ::end] measure)
+      (given (evaluate-measure now ::db ::term-service ::router [::start ::end] measure)
         ::anom/category := ::anom/unsupported
         ::anom/message := "Unsupported language `text/fhirpath`."
         :fhir/issue := "not-supported"
@@ -204,9 +206,9 @@
       (datomic-test-util/stub-resource-by
         ::db #{:Library/url} #{"http://foo"} #{library})
       (stub-cql-translate "library-data" ::elm-library)
-      (stub-compile-library ::db ::elm-library ::compiled-library)
+      (stub-compile-library ::db ::term-service ::elm-library ::compiled-library)
 
-      (given (evaluate-measure now ::db ::router [::start ::end] measure)
+      (given (evaluate-measure now ::db ::term-service ::router [::start ::end] measure)
         ::anom/category := ::anom/incorrect
         ::anom/message := "Missing expression."
         :fhir/issue := "required"
@@ -236,13 +238,13 @@
       (datomic-test-util/stub-resource-by
         ::db #{:Library/url} #{"http://foo"} #{library})
       (stub-cql-translate "library-data" ::elm-library)
-      (stub-compile-library ::db ::elm-library ::compiled-library)
+      (stub-compile-library ::db ::term-service ::elm-library ::compiled-library)
       (stub-evaluate-expression
         ::db now ::compiled-library "Patient" "InInitialPopulation" 1)
       (datomic-test-util/stub-pull-non-primitive
         ::db :CodeableConcept population-concept ::population-concept)
 
-      (let [measure-report (evaluate-measure now ::db ::router [::start ::end] measure)]
+      (let [measure-report (evaluate-measure now ::db ::term-service ::router [::start ::end] measure)]
 
         (is (= "MeasureReport" (get measure-report "resourceType")))
 
@@ -300,7 +302,7 @@
       (datomic-test-util/stub-resource-by
         ::db #{:Library/url} #{"http://foo"} #{library})
       (stub-cql-translate "library-data" ::elm-library)
-      (stub-compile-library ::db ::elm-library ::compiled-library)
+      (stub-compile-library ::db ::term-service ::elm-library ::compiled-library)
       (stub-evaluate-expression
         ::db now ::compiled-library "Patient" "InInitialPopulation" 1)
       (stub-calc-stratums
@@ -313,7 +315,7 @@
             population-concept ::population-concept
             stratifier-concept ::stratifier-concept)))
 
-      (let [measure-report (evaluate-measure now ::db ::router [::start ::end] measure)]
+      (let [measure-report (evaluate-measure now ::db ::term-service ::router [::start ::end] measure)]
         (is (= "MeasureReport" (get measure-report "resourceType")))
 
         (is (= ::stratifier-concept
@@ -386,7 +388,7 @@
       (datomic-test-util/stub-resource-by
         ::db #{:Library/url} #{"http://foo"} #{library})
       (stub-cql-translate "library-data" ::elm-library)
-      (stub-compile-library ::db ::elm-library ::compiled-library)
+      (stub-compile-library ::db ::term-service ::elm-library ::compiled-library)
       (stub-evaluate-expression
         ::db now ::compiled-library "Patient" "InInitialPopulation" 1)
       (stub-calc-mult-component-stratums
@@ -401,7 +403,7 @@
             stratifier-concept-gender ::stratifier-concept-gender
             stratifier-concept-age ::stratifier-concept-age)))
 
-      (let [measure-report (evaluate-measure now ::db ::router [::start ::end] measure)]
+      (let [measure-report (evaluate-measure now ::db ::term-service ::router [::start ::end] measure)]
         (is (= "MeasureReport" (get measure-report "resourceType")))
 
         (is (= [::stratifier-concept-gender ::stratifier-concept-age]
@@ -461,13 +463,15 @@
                    (get "count"))))))))
 
 
-(defn stub-evaluate-measure [now db router period-start period-end measure measure-report]
+(defn stub-evaluate-measure
+  [now db term-service router period-start period-end measure measure-report]
   (st/instrument
     [`evaluate-measure]
     {:spec
      {`evaluate-measure
       (s/fspec
-        :args (s/cat :now #{now} :db #{db} :router #{router}
+        :args (s/cat :now #{now} :db #{db} :term-service #{term-service}
+                     :router #{router}
                      :period (s/tuple #{period-start} #{period-end})
                      :measure #{measure})
         :ret #{measure-report})}
@@ -479,7 +483,102 @@
 
 
 (def term-service
-  (ts/term-service "http://tx.fhir.org/r4" {} nil nil))
+  (reify ts/TermService
+    (-expand-value-set [_ {:keys [url]}]
+      (case url
+        "http://hl7.org/fhir/ValueSet/administrative-gender"
+        (md/success-deferred
+          {:expansion
+           {:contains
+            [{:system "http://hl7.org/fhir/administrative-gender"
+              :code "male"}
+             {:system "http://hl7.org/fhir/administrative-gender"
+              :code "female"}]}})
+        "http://hl7.org/fhir/ValueSet/publication-status"
+        (md/success-deferred
+          {:expansion
+           {:contains
+            [{:system "http://hl7.org/fhir/publication-status"
+              :code "draft"
+              :display "Draft"}
+             {:system "http://hl7.org/fhir/publication-status"
+              :code "active"
+              :display "Active"}
+             {:system "http://hl7.org/fhir/publication-status"
+              :code "retired"
+              :display "Retired"}
+             {:system "http://hl7.org/fhir/publication-status"
+              :code "unknown"
+              :display "Unknown"}]}})
+        "http://hl7.org/fhir/ValueSet/expression-language"
+        (md/success-deferred
+          {:expansion
+           {:contains
+            [{:system "http://hl7.org/fhir/expression-language"
+              :code "text/cql"
+              :display "CQL"}
+             {:system "http://hl7.org/fhir/expression-language"
+              :code "text/fhirpath"
+              :display "FHIRPath"}
+             {:system "http://hl7.org/fhir/expression-language"
+              :code "application/x-fhir-query"
+              :display "FHIR Query"}]}})
+        "http://hl7.org/fhir/ValueSet/observation-status"
+        (md/success-deferred
+          {:expansion
+           {:contains
+            [{:system "http://hl7.org/fhir/observation-status"
+              :code "registered"
+              :display "Registered"}
+             {:system "http://hl7.org/fhir/observation-status"
+              :code "preliminary"
+              :display "Preliminary"}
+             {:system "http://hl7.org/fhir/observation-status"
+              :code "final"
+              :display "Final"}
+             {:system "http://hl7.org/fhir/observation-status"
+              :code "amended"
+              :display "Amended"}
+             {:system "http://hl7.org/fhir/observation-status"
+              :code "corrected"
+              :display "Corrected"}
+             {:system "http://hl7.org/fhir/observation-status"
+              :code "cancelled"
+              :display "Cancelled"}
+             {:system "http://hl7.org/fhir/observation-status"
+              :code "entered-in-error"
+              :display "Entered in Error"}
+             {:system "http://hl7.org/fhir/observation-status"
+              :code "unknown"
+              :display "Unknown"}]}})
+        "https://fhir.bbmri.de/ValueSet/icd-10-gm-c25"
+        (md/success-deferred
+          {:expansion
+           {:contains
+            [{:system "http://fhir.de/CodeSystem/dimdi/icd-10-gm"
+              :code "C25.0"
+              :version "2020"}
+             {:system "http://fhir.de/CodeSystem/dimdi/icd-10-gm"
+              :code "C25.1"
+              :version "2020"}
+             {:system "http://fhir.de/CodeSystem/dimdi/icd-10-gm"
+              :code "C25.2"
+              :version "2020"}
+             {:system "http://fhir.de/CodeSystem/dimdi/icd-10-gm"
+              :code "C25.3"
+              :version "2020"}
+             {:system "http://fhir.de/CodeSystem/dimdi/icd-10-gm"
+              :code "C25.4"
+              :version "2020"}
+             {:system "http://fhir.de/CodeSystem/dimdi/icd-10-gm"
+              :code "C25.7"
+              :version "2020"}
+             {:system "http://fhir.de/CodeSystem/dimdi/icd-10-gm"
+              :code "C25.8"
+              :version "2020"}
+             {:system "http://fhir.de/CodeSystem/dimdi/icd-10-gm"
+              :code "C25.9"
+              :version "2020"}]}})))))
 
 
 (defn- db-with [{:strs [entry]}]
@@ -523,7 +622,7 @@
   (cql/clear-resource-cache!)
   (let [db (db-with (read-data name))
         period [(Year/of 2000) (Year/of 2020)]]
-    (evaluate-measure now db ::router period (d/entity db [:Measure/id "0"]))))
+    (evaluate-measure now db term-service ::router period (d/entity db [:Measure/id "0"]))))
 
 
 (defn- first-population-count [measure-report]
@@ -567,7 +666,8 @@
     "q16" 1
     "q17" 2
     "q18" 1
-    "q24" 1)
+    "q24" 1
+    "q27" 1)
 
   (given (first-stratifier-stratums (evaluate "q19-stratifier-ageclass"))
     [0 "value" "text"] := "10"

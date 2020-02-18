@@ -137,7 +137,7 @@
 
       (testing "as GET request"
         (measure-test/stub-evaluate-measure
-          now ::db ::router "2014" "2015" ::measure ::measure-report)
+          now ::db ::term-service ::router "2014" "2015" ::measure ::measure-report)
 
         (let [{:keys [status body]}
               @((handler
@@ -155,7 +155,7 @@
 
       (testing "as POST request"
         (measure-test/stub-evaluate-measure
-          now ::db ::router "2014" "2015" ::measure {})
+          now ::db ::term-service ::router "2014" "2015" ::measure {})
         (datomic-test-util/stub-squuid "0")
         (stub-upsert-resource
           ::conn ::term-service ::db :server-assigned-id {"id" "0"}
@@ -183,7 +183,7 @@
 
       (testing "as GET request"
         (measure-test/stub-evaluate-measure
-          now ::db ::router "2014" "2015" ::measure ::measure-report)
+          now ::db ::term-service ::router "2014" "2015" ::measure ::measure-report)
 
         (let [{:keys [status body]}
               @((handler
@@ -201,7 +201,7 @@
 
       (testing "as POST request"
         (measure-test/stub-evaluate-measure
-          now ::db ::router "2014" "2015" ::measure {})
+          now ::db ::term-service ::router "2014" "2015" ::measure {})
         (datomic-test-util/stub-squuid "0")
         (stub-upsert-resource
           ::conn ::term-service ::db :server-assigned-id {"id" "0"}

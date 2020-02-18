@@ -37,10 +37,13 @@
     [blaze.elm.string :as string]
     [blaze.elm.type-infer :refer [infer-library-types]]
     [blaze.elm.util :as elm-util]
+    [blaze.terminology-service :as ts :refer [term-service?]]
     [clojure.spec.alpha :as s]
     [cognitect.anomalies :as anom]
     [cuerdas.core :as str]
-    [datomic-spec.core :as ds])
+    [datomic-spec.core :as ds]
+    [manifold.deferred :as md]
+    [taoensso.timbre :as log])
   (:import
     [java.time LocalDate LocalDateTime OffsetDateTime Year YearMonth ZoneOffset]
     [java.time.temporal ChronoUnit]
@@ -112,8 +115,12 @@
   (s/keys :req-un [::ds/db ::now] :opt-un [::library-context]))
 
 
+(s/def ::term-service
+  term-service?)
+
+
 (s/def ::compile-context
-  (s/keys :req-un [:elm/library]))
+  (s/keys :req-un [::ds/db ::term-service :elm/library]))
 
 
 (s/fdef compile
@@ -161,7 +168,8 @@
 
 
 (s/fdef compile-library
-  :args (s/cat :db ::ds/db :library :elm/library :opts map?)
+  :args (s/cat :db ::ds/db :term-service term-service? :library :elm/library
+               :opts map?)
   :ret (s/or :result :life/compiled-library
              :anomaly ::anom/anomaly))
 
@@ -169,13 +177,13 @@
   "Compiles `library` using `db` to retrieve codes.
 
   There are currently no options."
-  [db library opts]
+  [db term-service library opts]
   (let [library (-> library
                     normalize-library
                     find-equiv-rels-library
                     infer-library-deps
                     infer-library-types)
-        context (assoc opts :db db :library library)
+        context (assoc opts :db db :term-service term-service :library library)
         expr-defs (transduce
                     (map #(compile-expression-def context %))
                     (completing
@@ -610,7 +618,32 @@
 
 ;; 3.12. ValueSetRef
 ;;
-;; TODO
+;; The ValueSetRef expression allows a previously defined named value set to be
+;; referenced within an expression. Conceptually, referencing a value set
+;; returns the expansion set for the value set as a list of codes.
+(defmethod compile* :elm.compiler.type/value-set-ref
+  [{{{value-set-defs :def} :valueSets} :library
+    :keys [term-service]
+    :as context}
+   {:keys [name]}]
+  (if-let [{:keys [id]} (some #(when (= name (:name %)) %) value-set-defs)]
+    ;; TODO: do not block here
+    @(-> (ts/expand-value-set term-service {:url id})
+         (md/chain'
+           (fn [{{codes :contains} :expansion}]
+             (into
+               []
+               (mapcat
+                 (fn [{:keys [system version code]}]
+                   (if (and system code)
+                     [(code/to-code system version code)]
+                     (log/warn (format "Skip code from expansion without system or code. system = `%s`, code = `%s`" system code)))))
+               codes))))
+    (throw-anom
+      ::anom/incorrect
+      (str "ValueSetDef `" name "` not found.")
+      :context context)))
+
 
 
 ;; 9. Reusing Logic

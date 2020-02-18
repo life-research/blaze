@@ -29,7 +29,7 @@
    measure]
   (let [period [periodStart periodEnd]]
     (-> (md/future-with executor
-          (evaluate-measure (now clock) db router period measure))
+          (evaluate-measure (now clock) db term-service router period measure))
         (md/chain'
           (fn [result]
             (if (::anom/category result)

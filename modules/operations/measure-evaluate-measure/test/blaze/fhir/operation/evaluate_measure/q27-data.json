@@ -1,0 +1,121 @@
+{
+  "resourceType": "bundle",
+  "type": "transaction",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Patient",
+        "id": "0"
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Patient/0"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Patient",
+        "id": "1"
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Patient/1"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "id": "0",
+        "code": {
+          "coding": [
+            {
+              "code": "C25.8",
+              "system": "http://fhir.de/CodeSystem/dimdi/icd-10-gm",
+              "version": "2020"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/0"
+        }
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Condition/0"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "id": "1",
+        "code": {
+          "coding": [
+            {
+              "code": "C25.5",
+              "system": "http://fhir.de/CodeSystem/dimdi/icd-10-gm",
+              "version": "2020"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/1"
+        }
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Condition/1"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Measure",
+        "id": "0",
+        "url": "0",
+        "status": "active",
+        "subjectCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://hl7.org/fhir/resource-types",
+              "code": "Patient"
+            }
+          ]
+        },
+        "library": [
+          "0"
+        ],
+        "scoring": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/measure-scoring",
+              "code": "cohort"
+            }
+          ]
+        },
+        "group": [
+          {
+            "population": [
+              {
+                "code": {
+                  "coding": [
+                    {
+                      "system": "http://terminology.hl7.org/CodeSystem/measure-population",
+                      "code": "initial-population"
+                    }
+                  ]
+                },
+                "criteria": {
+                  "language": "text/cql",
+                  "expression": "InInitialPopulation"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Measure/0"
+      }
+    }
+  ]
+}
