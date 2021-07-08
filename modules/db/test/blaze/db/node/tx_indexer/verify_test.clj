@@ -99,6 +99,7 @@
 
 
 (def tid-patient (codec/tid "Patient"))
+(def tid-observation (codec/tid "Observation"))
 
 (def patient-0 {:fhir/type :fhir/Patient :id "0"})
 (def patient-0-v2 {:fhir/type :fhir/Patient :id "0" :gender #fhir/code"male"})
@@ -237,6 +238,46 @@
         :http/status := 412)))
 
   (testing "conditional create"
+    (testing "match"
+      (with-open [node (new-node)]
+        @(d/transact node [[:put {:fhir/type :fhir/Patient :id "id-224829"
+                                  :identifier [#fhir/Identifier{:value "224934"}]}]])
+
+        (is-entries=
+          (verify/verify-tx-cmds
+            (d/db node) 2
+            [{:op "create" :type "Patient" :id "id-224839"
+              :hash (hash/generate {:fhir/type :fhir/Patient :id "id-224839"})
+              :if-none-exist [["identifier" "224934"]]}])
+          [])))
+
+    (testing "match with reference"
+      (with-open [node (new-node)]
+        @(d/transact node [[:put {:fhir/type :fhir/Patient :id "id-224829"
+                                  :identifier [#fhir/Identifier{:value "224934"}]}]])
+
+        (let [observation-hash (hash/generate {:fhir/type :fhir/Observation :id "id-230652"})]
+          (is-entries=
+            (verify/verify-tx-cmds
+              (d/db node) 2
+              [{:op "create" :type "Patient" :id "id-224839"
+                :hash (hash/generate {:fhir/type :fhir/Patient :id "id-224839"})
+                :if-none-exist [["identifier" "224934"]]}
+               {:op "create" :type "Observation" :id "id-230652"
+                :hash observation-hash :refs [["Patient" "id-224839"]]}])
+            (let [value (rts/encode-value observation-hash 1 :create)]
+              [[:resource-as-of-index
+                (rao/encode-key tid-observation (codec/id-byte-string "id-230652") 2)
+                value]
+               [:type-as-of-index
+                (tao/encode-key tid-observation 2 (codec/id-byte-string "id-230652"))
+                value]
+               [:system-as-of-index
+                (sao/encode-key 2 tid-observation (codec/id-byte-string "id-230652"))
+                value]
+               (type-stats/index-entry tid-observation 2 {:total 1 :num-changes 1})
+               (system-stats/index-entry 2 {:total 2 :num-changes 2})])))))
+
     (testing "conflict"
       (with-open [node (new-node)]
         @(d/transact node [[:put {:fhir/type :fhir/Patient :id "0"

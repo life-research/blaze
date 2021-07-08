@@ -245,6 +245,33 @@
           (testing "no new patient is created"
             (is (= 1 (d/type-total (d/db node) "Patient"))))))
 
+      (testing "on matching Patient and Observation referring to it"
+        (with-open [node (new-node)]
+          @(d/transact
+             node
+             [[:put {:fhir/type :fhir/Patient :id "0"
+                     :identifier [#fhir/Identifier{:value "111033"}]}]])
+
+          @(d/transact
+             node
+             [[:create
+               {:fhir/type :fhir/Patient :id "1"}
+               [["identifier" "111033"]]]
+              [:create
+               {:fhir/type :fhir/Observation :id "0"
+                :subject #fhir/Reference{:reference "Patient/1"}}]])
+
+          (testing "no new patient is created"
+            (is (= 1 (d/type-total (d/db node) "Patient"))))
+
+          (testing "the Observation was created"
+            (given @(d/pull node (d/resource-handle (d/db node) "Observation" "0"))
+              :fhir/type := :fhir/Observation
+              :id := "0"
+              [:meta :versionId] := #fhir/id"2"
+              [meta :blaze.db/op] := :create
+              [:subject :reference] := "Patient/0"))))
+
       (testing "on multiple matching Patients"
         (with-open [node (new-node)]
           @(d/transact

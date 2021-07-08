@@ -31,8 +31,8 @@
   "Resolves all identifiers a conditional transaction command.
 
   Throws an anomaly on conflicts."
-  {:arglists '([db-before cmd])}
-  (fn [_ {:keys [op]}] op))
+  {:arglists '([db-before res cmd])}
+  (fn [_ _ {:keys [op]}] op))
 
 
 (defn- existing-resource-handles [db type clauses]
@@ -63,28 +63,37 @@
 
 
 (defmethod resolve-id "create"
-  [db-before {:keys [type if-none-exist] :as cmd}]
+  [db-before res {:keys [type if-none-exist] :as cmd}]
   (let [[h1 h2] (some->> if-none-exist (existing-resource-handles db-before type))]
     (cond
       h2
       (throw-multiple-existing-resources-anomaly type if-none-exist [h1 h2])
       h1
-      (assoc cmd :op "hold" :id (:id h1))
+      (let [{:keys [id]} h1]
+        (log/trace (format "Resolved id `%s` for %s with query `%s`." id type
+                           (clauses->query-params if-none-exist)))
+        (-> (update res :cmds conj (assoc cmd :op "hold" :id id))
+            (update :ref-mappings assoc [type (:id cmd)] [type id])))
       :else
-      cmd)))
+      (update res :cmds conj cmd))))
 
 
 (defmethod resolve-id :default
-  [_ cmd]
-  cmd)
+  [_ res cmd]
+  (update res :cmds conj cmd))
 
 
-(defn resolve-ids
+(defn- map-refs [ref-mappings {:keys [refs] :as cmd}]
+  (cond-> cmd refs (update :refs (partial mapv #(ref-mappings % %)))))
+
+
+(defn- resolve-ids
   "Resolves all identifiers from conditional transaction commands.
 
   Throws an anomaly on conflicts."
   [db-before cmds]
-  (mapv #(resolve-id db-before %) cmds))
+  (let [{:keys [cmds ref-mappings]} (reduce (partial resolve-id db-before) {:cmds [] :ref-mappings {}} cmds)]
+    (mapv #(map-refs ref-mappings %) cmds)))
 
 
 (defmulti format-command :op)
