@@ -1,16 +1,6 @@
 (ns blaze.db.impl.protocols)
 
 
-(defprotocol Node
-  (-db [node])
-
-  (-sync [node t])
-
-  (-submit-tx [node tx-ops])
-
-  (-tx-result [node t]))
-
-
 (defprotocol Db
   (-node [db])
 

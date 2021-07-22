@@ -7,7 +7,6 @@
     [blaze.db.api-spec]
     [blaze.db.impl.db-spec]
     [blaze.db.impl.index.tx-success :as tx-success]
-    [blaze.db.impl.protocols :as p]
     [blaze.db.kv :as kv]
     [blaze.db.kv.mem :refer [new-mem-kv-store]]
     [blaze.db.kv.mem-spec]
@@ -122,11 +121,11 @@
     (testing "create"
       (testing "one Patient"
         (with-open [node (new-node)]
-          @(-> (p/-submit-tx node [[:create {:fhir/type :fhir/Patient :id "0"}]])
+          @(-> (node/submit-tx node [[:create {:fhir/type :fhir/Patient :id "0"}]])
                (ac/then-compose
                  (fn [t]
                    (Thread/sleep 100)
-                   (p/-tx-result node t))))
+                   (node/tx-result node t))))
 
           (given @(d/pull node (d/resource-handle (d/db node) "Patient" "0"))
             :fhir/type := :fhir/Patient
@@ -140,11 +139,11 @@
                            {:resource-store (new-resource-store-failing-on-get)})]
 
           (try
-            @(-> (p/-submit-tx node [[:put {:fhir/type :fhir/Patient :id "0"}]])
+            @(-> (node/submit-tx node [[:put {:fhir/type :fhir/Patient :id "0"}]])
                  (ac/then-compose
                    (fn [t]
                      (Thread/sleep 100)
-                     (p/-tx-result node t))))
+                     (node/tx-result node t))))
             (catch Exception e
               (given (ex-data (ex-cause e))
                 ::anom/category := ::anom/fault))))))
@@ -156,11 +155,11 @@
            (ac/failed-future (ex-anom {::anom/category ::anom/fault ::x ::y})))]
         (with-open [node (new-node)]
           (try
-            @(-> (p/-submit-tx node [[:put {:fhir/type :fhir/Patient :id "0"}]])
+            @(-> (node/submit-tx node [[:put {:fhir/type :fhir/Patient :id "0"}]])
                  (ac/then-compose
                    (fn [t]
                      (Thread/sleep 100)
-                     (p/-tx-result node t))))
+                     (node/tx-result node t))))
             (catch Exception e
               (given (ex-data (ex-cause e))
                 ::anom/category := ::anom/fault

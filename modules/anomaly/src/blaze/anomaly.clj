@@ -23,6 +23,13 @@
        (let [~binding-form res#] ~@body))))
 
 
+(defmacro if-failed [[binding-form form] then else]
+  `(let [res# ~form]
+     (if (::anom/category res#)
+       (let [~binding-form res#] ~then)
+       ~else)))
+
+
 (defmacro if-ok [[sym form] then else]
   `(let [~sym ~form]
      (if (::anom/category ~sym)

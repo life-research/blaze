@@ -19,11 +19,15 @@
 
 
 (defn submit
-  "Submits transaction commands.
+  "Submits `tx-cmds` (transaction commands) to `tx-log`.
 
-  Returns a CompletableFuture that will complete with point in time t of the
+  Returns a CompletableFuture that will complete with point in time `t` of the
   potentially valid transaction or complete exceptionally with an anomaly in
-  case of errors."
+  case of errors.
+
+  Note: This function only ensures that the transaction is commited into the log
+  and will be handled in the future. So a positive return value doesn't mean
+  that the transaction itself was sucessful."
   [tx-log tx-cmds]
   (-submit tx-log tx-cmds))
 

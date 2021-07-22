@@ -1,9 +1,8 @@
 (ns blaze.db.node
   "Local Database Node"
   (:require
-    [blaze.anomaly :refer [ex-anom if-ok when-ok]]
+    [blaze.anomaly :refer [ex-anom if-failed if-ok when-ok]]
     [blaze.async.comp :as ac]
-    [blaze.db.api :as d]
     [blaze.db.impl.batch-db :as batch-db]
     [blaze.db.impl.codec :as codec]
     [blaze.db.impl.db :as db]
@@ -13,6 +12,7 @@
     [blaze.db.impl.protocols :as p]
     [blaze.db.impl.search-param :as search-param]
     [blaze.db.kv :as kv]
+    [blaze.db.node.protocols :as np]
     [blaze.db.node.resource-indexer :as resource-indexer :refer [new-resource-indexer]]
     [blaze.db.node.spec]
     [blaze.db.node.transaction :as tx]
@@ -39,6 +39,20 @@
 
 
 (set! *warn-on-reflection* true)
+
+
+(defn submit-tx [node tx-ops]
+  (np/-submit-tx node tx-ops))
+
+
+(defn tx-result
+  "Waits for the transaction with `t` to happen on `node`.
+
+  Returns a CompletableFuture that completes with the database after the
+  transaction in case of success or completes exceptionally with an anomaly in
+  case of a transaction error or other errors."
+  [node t]
+  (np/-tx-result node t))
 
 
 (defhistogram duration-seconds
@@ -190,7 +204,7 @@
   (prom/observe! transaction-sizes (count tx-cmds))
   (let [timer (prom/timer duration-seconds "index-resources")
         future (index-resources node tx-data)
-        result (index-tx (d/db node) tx-data)]
+        result (index-tx (np/-db node) tx-data)]
     (if (::anom/category result)
       (commit-error! node t result)
       (do
@@ -232,27 +246,27 @@
 (defrecord Node [tx-log rh-cache tx-cache kv-store resource-store
                  search-param-registry resource-indexer state tx-resource-cache
                  run? poll-timeout finished]
-  p/Node
+  np/Node
   (-db [node]
     (db/db node (:t @state)))
 
   (-sync [node t]
     (if (<= t (:t @state))
-      (ac/completed-future (d/db node))
+      (ac/completed-future (np/-db node))
       (-> (add-watcher! state t)
           (ac/then-apply (fn [_] (db/db node t))))))
 
   (-submit-tx [_ tx-ops]
     (log/trace "submit" (count tx-ops) "tx-ops")
-    (if-ok [res (validation/validate-ops tx-ops)]
+    (if-failed [e (validation/validate-ops tx-ops)]
+      (CompletableFuture/failedFuture (ex-info "" e))
       (let [[tx-cmds entries] (tx/prepare-ops tx-ops)]
         (-> (rs/put resource-store entries)
             (ac/then-compose (fn [_] (tx-log/submit tx-log tx-cmds)))
             (ac/then-apply
               (fn [t]
                 (swap! tx-resource-cache assoc t entries)
-                t))))
-      (CompletableFuture/failedFuture (ex-info "" res))))
+                t))))))
 
   (-tx-result [node t]
     (let [watcher (add-watcher! state t)

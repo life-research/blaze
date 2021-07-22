@@ -207,6 +207,14 @@ That tuples are further processed against the `ResourceAsOf` index in order to c
 
 **TODO: continue...**
 
+## Transaction Handling
+
+* a transaction bundle is POST'ed to one arbitrary node
+* this node submits the transaction commands to the central transaction log
+* all nodes (inkl. the transaction submitter) receive the transaction commands from the central transaction log
+
+**TODO: continue...**
+
 [1]: <https://www.datomic.com>
 [2]: <https://opencrux.com/main/index.html>
 [3]: <https://en.wikipedia.org/wiki/Persistent_data_structure>

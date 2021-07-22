@@ -65,7 +65,6 @@
 
 
 (defn prepare-ops
-  "Splits each transaction operator into a collection of :blaze.db/tx-cmd and a
-  map of hash to resource."
+  "Returns a tuple of :blaze.db/tx-cmds and a map of hash to resource."
   [tx-ops]
   (split (mapv prepare-op tx-ops)))

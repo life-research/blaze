@@ -401,7 +401,7 @@
           ::anom/category := ::anom/incorrect
           ::anom/message := "Duplicate resource `Patient/0`."))))
 
-  (testing "failed transactions don't leaf behind any inspectable data"
+  (testing "failed transactions don't leave behind any inspectable data"
     (with-open [node (new-node)]
       (testing "creating an active patient successfully"
         @(d/transact

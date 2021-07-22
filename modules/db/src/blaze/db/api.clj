@@ -14,7 +14,8 @@
     [blaze.async.comp :as ac]
     [blaze.db.impl.codec :as codec]
     [blaze.db.impl.index.resource-handle :as rh]
-    [blaze.db.impl.protocols :as p])
+    [blaze.db.impl.protocols :as p]
+    [blaze.db.node.protocols :as np])
   (:import
     [java.io Closeable]))
 
@@ -24,7 +25,7 @@
 
   Does not block."
   [node]
-  (p/-db node))
+  (np/-db node))
 
 
 (defn sync
@@ -34,16 +35,16 @@
   The database could be of a newer point in time. Please use `as-of` afterwards
   if you want a database with exactly `t`."
   [node t]
-  (p/-sync node t))
+  (np/-sync node t))
 
 
 (defn transact
-  "Submits `tx-ops` to the central transaction log and waits for the transaction
-  to commit on `node`.
+  "Submits `tx-ops` (transaction operators) to the central transaction log and
+  waits for the transaction to commit on `node`.
 
   The collection of `tx-ops` has to be non-empty.
 
-  A transaction op can be one of the following:
+  A transaction operator can be one of the following:
 
   * [:create resource clauses?]
   * [:put resource t?]
@@ -53,8 +54,8 @@
   transaction in case of success or completes exceptionally with an anomaly in
   case of a transaction error or other errors."
   [node tx-ops]
-  (-> (p/-submit-tx node tx-ops)
-      (ac/then-compose #(p/-tx-result node %))))
+  (-> (np/-submit-tx node tx-ops)
+      (ac/then-compose #(np/-tx-result node %))))
 
 
 (defn node
